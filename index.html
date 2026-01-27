@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  background-color: black;
+  font-family: Arial, sans-serif;
+  color: white;
+  text-align: center;
+  margin-top: 30px;
+}
+
+/* Layout: traffic light on left, camera center, predictions on right */
+.main-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+/* Traffic light housing */
+.traffic-housing {
+  width: 70px;
+  background: #222;
+  border-radius: 20px;
+  padding: 10px;
+  box-shadow: 0 0 15px rgba(255,255,255,0.1);
+}
+
+/* Each light circle */
+.traffic-light {
+  width: 50px;
+  height: 50px;
+  margin: 8px auto;
+  border-radius: 50%;
+  background: #111;
+  box-shadow: 0 0 6px rgba(0,0,0,0.8) inset;
+}
+
+/* Base (off) colors */
+.red-light   { background: #330000; }
+.yellow-light{ background: #333300; }
+.green-light { background: #003300; }
+
+/* Active glow */
+.active-red {
+  background: red;
+  box-shadow: 0 0 20px red;
+}
+.active-yellow {
+  background: yellow;
+  box-shadow: 0 0 20px yellow;
+}
+.active-green {
+  background: #00ff00;
+  box-shadow: 0 0 20px #00ff00;
+}
+
+h1 {
+  font-family: "Lobster", cursive;
+  color:white;
+}
+
+button {
+  padding: 10px 18px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
+  margin: 4px;
+}
+
+button:hover {
+  background: #5ca3ff;
+  box-shadow: 0 0 10px #5ca3ff;
+}
+
+/* Click Start text */
+#click-start {
+  color: #4a90e2;
+  font-size: 16px;
+  font-weight: bold;
+  margin-top: 8px;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+#click-start.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#webcam-container canvas {
+  border-radius: 14px;
+  box-shadow: 0 0 20px rgba(74, 144, 226, 0.6);
+  width: 90vw;
+  max-width: 400px;
+  height: auto;
+}
+
+/* Predictions now on right side */
+.predictions-right {
+  min-width: 280px;
+  text-align: left;
+}
+
+#label-container .prediction-box {
+  margin-top: 5px;
+  padding: 10px;
+  background: #1a1a1a;
+  color: #d9d9d9;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 260px;
+  text-align: center;
+  font-size: 16px;
+  box-shadow: 0 0 10px rgba(255,255,255,0.05);
+}
+
+.camera-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+</style>
+</head>
+
+<body>
+
+<h1><b>AI Traffic Pedestrian Assistant</b></h1>
+
+<div>
+  <button type="button" onclick="startModel()">Start</button>
+  <button type="button" onclick="toggleCamera()">Switch Camera</button>
+  <div id="click-start">Click Start</div>
+</div>
+
+<div class="main-container">
+  <!-- Traffic light on the left -->
+  <div class="traffic-housing">
+    <div id="tl-red" class="traffic-light red-light"></div>
+    <div id="tl-yellow" class="traffic-light yellow-light"></div>
+    <div id="tl-green" class="traffic-light green-light"></div>
+  </div>
+
+  <!-- Camera center -->
+  <div class="camera-section">
+    <div id="webcam-container"></div>
+
+    <div id="top-prediction" style="margin-top:20px; font-size:18px; color:#4a90e2; font-weight:bold;">
+        Top prediction: -
+    </div>
+
+    <div id="signal-light" style="margin-top:20px; font-size:22px; font-weight:bold;"></div>
+    <div id="signal-text" style="margin-top:10px; font-size:18px;"></div>
+  </div>
+
+  <!-- Predictions moved to right side -->
+  <div class="predictions-right">
+    <div id="label-container"></div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<script>
+const URL = "https://teachablemachine.withgoogle.com/models/SIFPUVTE1/";
+
+let model, webcam, labelContainer, maxPredictions;
+let isRunning = false;
+
+// smoothing state
+let currentSignal = "none";        
+let lastWinner = "none";           
+let sameWinnerCount = 0;
+const STABLE_FRAMES = 5;
+const THRESHOLD = 70;
+const HYSTERESIS = 10;
+
+let facingMode = "environment";
+
+async function startModel() {
+    // Hide "Click Start" text
+    document.getElementById("click-start").classList.add("hidden");
+    
+    if (webcam) {
+        await webcam.stop();
+        webcam = null;
+        document.getElementById("webcam-container").innerHTML = "";
+        document.getElementById("label-container").innerHTML = "";
+    }
+
+    if (!model) {
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+    }
+
+    const size = Math.min(window.innerWidth * 0.9, 400);
+    const flip = (facingMode === "user");
+
+    webcam = new tmImage.Webcam(size, size, flip);
+
+    await webcam.setup({ facingMode: facingMode });
+    await webcam.play();
+
+    document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+    labelContainer = document.getElementById("label-container");
+    labelContainer.innerHTML = "";
+    for (let i = 0; i < maxPredictions; i++) {
+        const div = document.createElement("div");
+        div.className = "prediction-box";
+        labelContainer.appendChild(div);
+    }
+
+    isRunning = true;
+    window.requestAnimationFrame(loop);
+}
+
+async function toggleCamera() {
+    facingMode = (facingMode === "environment") ? "user" : "environment";
+    if (isRunning) {
+        await startModel();
+    }
+}
+
+function setTrafficLight(color) {
+    const redEl = document.getElementById("tl-red");
+    const yellowEl = document.getElementById("tl-yellow");
+    const greenEl = document.getElementById("tl-green");
+
+    redEl.classList.remove("active-red");
+    yellowEl.classList.remove("active-yellow");
+    greenEl.classList.remove("active-green");
+
+    if (color === "red") {
+        redEl.classList.add("active-red");
+    } else if (color === "yellow") {
+        yellowEl.classList.add("active-yellow");
+    } else if (color === "green") {
+        greenEl.classList.add("active-green");
+    }
+}
+
+async function loop() {
+    if (!isRunning || !webcam) return;
+    webcam.update();
+    await predict();
+    window.requestAnimationFrame(loop);
+}
+
+async function predict() {
+    if (!model || !webcam) return;
+
+    const prediction = await model.predict(webcam.canvas);
+
+    for (let i = 0; i < prediction.length; i++) {
+        labelContainer.childNodes[i].innerHTML =
+            prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+    }
+
+    let top = prediction[0];
+    for (let i = 1; i < prediction.length; i++) {
+        if (prediction[i].probability > top.probability)
+            top = prediction[i];
+    }
+    document.getElementById("top-prediction").innerHTML =
+        "Top prediction: " + top.className;
+
+    let pedProb = 0;
+    let carProb = 0;
+    let trafProb = 0;
+
+    for (let i = 0; i < prediction.length; i++) {
+        const name = prediction[i].className.toLowerCase();
+        const prob = prediction[i].probability;
+
+        if (name === "ped" || name === "pedestrian") {
+            pedProb = prob;
+        } else if (name === "car") {
+            carProb = prob;
+        } else if (name === "traf" || name === "traffic") {
+            trafProb = prob;
+        }
+    }
+
+    const pedConf = pedProb * 100;
+    const carConf = carProb * 100;
+    const trafConf = trafProb * 100;
+
+    const lightBox = document.getElementById("signal-light");
+    const textBox = document.getElementById("signal-text");
+
+    const pedHigh = pedConf > THRESHOLD;
+    const carHigh = carConf > THRESHOLD;
+    const trafHigh = trafConf > THRESHOLD;
+
+    let frameWinner = "none";
+
+    const candidates = [];
+    if (pedHigh)  candidates.push({key: "ped",  conf: pedConf});
+    if (carHigh)  candidates.push({key: "car",  conf: carConf});
+    if (trafHigh) candidates.push({key: "traf", conf: trafConf});
+
+    if (candidates.length === 0) {
+        frameWinner = "none";
+    } else {
+        candidates.sort((a, b) => b.conf - a.conf);
+        const best = candidates[0];
+        const second = candidates[1];
+
+        if (!second || best.conf >= second.conf + HYSTERESIS) {
+            frameWinner = best.key;
+        } else {
+            frameWinner = lastWinner;
+        }
+    }
+
+    if (frameWinner === lastWinner) {
+        sameWinnerCount++;
+    } else {
+        sameWinnerCount = 1;
+        lastWinner = frameWinner;
+    }
+
+    if (sameWinnerCount >= STABLE_FRAMES) {
+        if (frameWinner === "ped" && currentSignal !== "green") {
+            currentSignal = "green";
+            setTrafficLight("green");
+            lightBox.innerHTML = "🟢 GREEN LIGHT";
+            textBox.innerHTML = "You can cross now (pedestrian detected).";
+        } else if (frameWinner === "car" && currentSignal !== "red") {
+            currentSignal = "red";
+            setTrafficLight("red");
+            lightBox.innerHTML = "🔴 RED LIGHT";
+            textBox.innerHTML = "Please wait, cars are detected.";
+        } else if (frameWinner === "traf" && currentSignal !== "yellow") {
+            currentSignal = "yellow";
+            setTrafficLight("yellow");
+            lightBox.innerHTML = "🟡 YELLOW LIGHT";
+            textBox.innerHTML = "Caution, traffic signal detected.";
+        } else if (frameWinner === "none" && currentSignal !== "none") {
+            currentSignal = "none";
+            setTrafficLight(null);
+            lightBox.innerHTML = "⚪";
+            textBox.innerHTML = "Scanning...";
+        }
+    }
+}
+</script>
+
+</body>
+</html>
+
