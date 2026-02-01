@@ -13,7 +13,7 @@ body {
   margin-top: 30px;
 }
 
-/* Layout: traffic light on left, camera center, predictions on right */
+/* Layout: vehicle light + camera in center, pedestrian light on right */
 .main-container {
   display: flex;
   justify-content: center;
@@ -29,6 +29,7 @@ body {
   border-radius: 20px;
   padding: 10px;
   box-shadow: 0 0 15px rgba(255,255,255,0.1);
+  margin-right: 10px;
 }
 
 /* Each light circle */
@@ -39,6 +40,7 @@ body {
   border-radius: 50%;
   background: #111;
   box-shadow: 0 0 6px rgba(0,0,0,0.8) inset;
+  position: relative;
 }
 
 /* Base (off) colors */
@@ -105,8 +107,9 @@ button:hover {
   height: auto;
 }
 
-/* Predictions now on right side */
-.predictions-right {
+/* Predictions now below camera */
+.predictions-below {
+  margin-top: 20px;
   min-width: 280px;
   text-align: left;
 }
@@ -122,12 +125,53 @@ button:hover {
   text-align: center;
   font-size: 16px;
   box-shadow: 0 0 10px rgba(255,255,255,0.05);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .camera-section {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* Container for vehicle column */
+.traffic-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Label under traffic housings */
+.traffic-label {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+/* Pedestrian column on right */
+.ped-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Glowing pedestrian icon */
+.ped-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  font-size: 26px;
+  color: #007700;
+  opacity: 0;
+  text-shadow: 0 0 8px #00ff00;
+  transition: opacity 0.2s ease;
+}
+
+.pedestrian-active .ped-icon {
+  opacity: 1;
+  color: #00ff00;
+  text-shadow: 0 0 15px #00ff00;
 }
 </style>
 </head>
@@ -143,14 +187,17 @@ button:hover {
 </div>
 
 <div class="main-container">
-  <!-- Traffic light on the left -->
-  <div class="traffic-housing">
-    <div id="tl-red" class="traffic-light red-light"></div>
-    <div id="tl-yellow" class="traffic-light yellow-light"></div>
-    <div id="tl-green" class="traffic-light green-light"></div>
+  <!-- Vehicle traffic light on the left -->
+  <div class="traffic-column">
+    <div class="traffic-housing">
+      <div id="tl-red" class="traffic-light red-light"></div>
+      <div id="tl-yellow" class="traffic-light yellow-light"></div>
+      <div id="tl-green" class="traffic-light green-light"></div>
+    </div>
+    <div class="traffic-label">Vehicles</div>
   </div>
 
-  <!-- Camera center -->
+  <!-- Camera center, probability table below -->
   <div class="camera-section">
     <div id="webcam-container"></div>
 
@@ -160,11 +207,22 @@ button:hover {
 
     <div id="signal-light" style="margin-top:20px; font-size:22px; font-weight:bold;"></div>
     <div id="signal-text" style="margin-top:10px; font-size:18px;"></div>
+
+    <!-- Probability table moved here -->
+    <div class="predictions-below">
+      <div id="label-container"></div>
+    </div>
   </div>
 
-  <!-- Predictions moved to right side -->
-  <div class="predictions-right">
-    <div id="label-container"></div>
+  <!-- Pedestrian traffic light on the right -->
+  <div class="ped-column">
+    <div class="traffic-housing">
+      <div id="ped-red" class="traffic-light red-light"></div>
+      <div id="ped-green" class="traffic-light green-light">
+        <div class="ped-icon">🚶</div>
+      </div>
+    </div>
+    <div class="traffic-label">Pedestrians</div>
   </div>
 </div>
 
@@ -179,19 +237,32 @@ let model, webcam, labelContainer, maxPredictions;
 let isRunning = false;
 
 // smoothing state
-let currentSignal = "none";        
-let lastWinner = "none";           
+let currentSignal = "none";        // "ped", "car", "traf", "none"
+let lastWinner = "none";
 let sameWinnerCount = 0;
-const STABLE_FRAMES = 5;
+const STABLE_FRAMES = 5;          // frames needed for same winner
 const THRESHOLD = 70;
 const HYSTERESIS = 10;
+
+// 3s delay before switching signal
+const SWITCH_DELAY_MS = 3000;
+let pendingSignal = null;
+let pendingTimeoutId = null;
 
 let facingMode = "environment";
 
 async function startModel() {
-    // Hide "Click Start" text
     document.getElementById("click-start").classList.add("hidden");
     
+    if (pendingTimeoutId !== null) {
+        clearTimeout(pendingTimeoutId);
+        pendingTimeoutId = null;
+        pendingSignal = null;
+    }
+    currentSignal = "none";
+    lastWinner = "none";
+    sameWinnerCount = 0;
+
     if (webcam) {
         await webcam.stop();
         webcam = null;
@@ -210,7 +281,6 @@ async function startModel() {
     const flip = (facingMode === "user");
 
     webcam = new tmImage.Webcam(size, size, flip);
-
     await webcam.setup({ facingMode: facingMode });
     await webcam.play();
 
@@ -235,6 +305,7 @@ async function toggleCamera() {
     }
 }
 
+// Vehicle traffic light
 function setTrafficLight(color) {
     const redEl = document.getElementById("tl-red");
     const yellowEl = document.getElementById("tl-yellow");
@@ -250,6 +321,23 @@ function setTrafficLight(color) {
         yellowEl.classList.add("active-yellow");
     } else if (color === "green") {
         greenEl.classList.add("active-green");
+    }
+}
+
+// Pedestrian traffic light (red/green only, with glowing icon)
+function setPedestrianLight(color) {
+    const pedRed = document.getElementById("ped-red");
+    const pedGreen = document.getElementById("ped-green");
+
+    if (!pedRed || !pedGreen) return;
+
+    pedRed.classList.remove("active-red");
+    pedGreen.classList.remove("active-green", "pedestrian-active");
+
+    if (color === "red") {
+        pedRed.classList.add("active-red");
+    } else if (color === "green") {
+        pedGreen.classList.add("active-green", "pedestrian-active");
     }
 }
 
@@ -308,22 +396,30 @@ async function predict() {
 
     let frameWinner = "none";
 
-    const candidates = [];
-    if (pedHigh)  candidates.push({key: "ped",  conf: pedConf});
-    if (carHigh)  candidates.push({key: "car",  conf: carConf});
-    if (trafHigh) candidates.push({key: "traf", conf: trafConf});
-
-    if (candidates.length === 0) {
-        frameWinner = "none";
-    } else {
-        candidates.sort((a, b) => b.conf - a.conf);
-        const best = candidates[0];
-        const second = candidates[1];
-
-        if (!second || best.conf >= second.conf + HYSTERESIS) {
-            frameWinner = best.key;
+    if (pedHigh && carHigh) {
+        if (pedConf >= carConf) {
+            frameWinner = "ped";
         } else {
-            frameWinner = lastWinner;
+            frameWinner = "car";
+        }
+    } else {
+        const candidates = [];
+        if (pedHigh)  candidates.push({key: "ped",  conf: pedConf});
+        if (carHigh)  candidates.push({key: "car",  conf: carConf});
+        if (trafHigh) candidates.push({key: "traf", conf: trafConf});
+
+        if (candidates.length === 0) {
+            frameWinner = "none";
+        } else {
+            candidates.sort((a, b) => b.conf - a.conf);
+            const best = candidates[0];
+            const second = candidates[1];
+
+            if (!second || best.conf >= second.conf + HYSTERESIS) {
+                frameWinner = best.key;
+            } else {
+                frameWinner = lastWinner;
+            }
         }
     }
 
@@ -335,31 +431,56 @@ async function predict() {
     }
 
     if (sameWinnerCount >= STABLE_FRAMES) {
-        if (frameWinner === "ped" && currentSignal !== "green") {
-            currentSignal = "green";
-            setTrafficLight("green");
-            lightBox.innerHTML = "🟢 GREEN LIGHT";
-            textBox.innerHTML = "You can cross now (pedestrian detected).";
-        } else if (frameWinner === "car" && currentSignal !== "red") {
-            currentSignal = "red";
-            setTrafficLight("red");
-            lightBox.innerHTML = "🔴 RED LIGHT";
-            textBox.innerHTML = "Please wait, cars are detected.";
-        } else if (frameWinner === "traf" && currentSignal !== "yellow") {
-            currentSignal = "yellow";
-            setTrafficLight("yellow");
-            lightBox.innerHTML = "🟡 YELLOW LIGHT";
-            textBox.innerHTML = "Caution, traffic signal detected.";
-        } else if (frameWinner === "none" && currentSignal !== "none") {
-            currentSignal = "none";
-            setTrafficLight(null);
-            lightBox.innerHTML = "⚪";
-            textBox.innerHTML = "Scanning...";
-        }
+        scheduleSignalChange(frameWinner, lightBox, textBox);
+    }
+}
+
+function scheduleSignalChange(frameWinner, lightBox, textBox) {
+    if (frameWinner === currentSignal) return;
+    if (pendingSignal === frameWinner) return;
+
+    if (pendingTimeoutId !== null) {
+        clearTimeout(pendingTimeoutId);
+        pendingTimeoutId = null;
+        pendingSignal = null;
+    }
+
+    pendingSignal = frameWinner;
+    pendingTimeoutId = setTimeout(() => {
+        applySignalChange(frameWinner, lightBox, textBox);
+        pendingSignal = null;
+        pendingTimeoutId = null;
+    }, SWITCH_DELAY_MS);
+}
+
+function applySignalChange(frameWinner, lightBox, textBox) {
+    if (frameWinner === currentSignal) return;
+
+    currentSignal = frameWinner;
+
+    if (frameWinner === "ped") {
+        setTrafficLight("red");
+        setPedestrianLight("green");
+        lightBox.innerHTML = "🟢 PEDESTRIAN PRIORITY";
+        textBox.innerHTML = "Pedestrians detected in majority. Cross now, cars must wait.";
+    } else if (frameWinner === "car") {
+        setTrafficLight("green");
+        setPedestrianLight("red");
+        lightBox.innerHTML = "🔴 PEDESTRIANS WAIT";
+        textBox.innerHTML = "More cars detected. Please wait before crossing.";
+    } else if (frameWinner === "traf") {
+        setTrafficLight("yellow");
+        setPedestrianLight("red");
+        lightBox.innerHTML = "🟡 YELLOW LIGHT";
+        textBox.innerHTML = "Caution, traffic signal detected.";
+    } else if (frameWinner === "none") {
+        setTrafficLight(null);
+        setPedestrianLight(null);
+        lightBox.innerHTML = "⚪";
+        textBox.innerHTML = "Scanning...";
     }
 }
 </script>
 
 </body>
 </html>
-
