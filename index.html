@@ -19,7 +19,7 @@ body {
   justify-content: center;
   align-items: flex-start;
   gap: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;          /* prevent wrapping so columns stay side by side */
 }
 
 /* Traffic light housing */
@@ -172,6 +172,40 @@ button:hover {
   opacity: 1;
   color: #00ff00;
   text-shadow: 0 0 15px #00ff00;
+}
+
+/* Make layout fit on small screens but keep left–center–right order */
+@media (max-width: 600px) {
+  .main-container {
+    gap: 10px;
+  }
+
+  .traffic-housing {
+    width: 55px;
+    padding: 8px;
+    margin-right: 4px;
+  }
+
+  .traffic-light {
+    width: 40px;
+    height: 40px;
+    margin: 6px auto;
+  }
+
+  #webcam-container canvas {
+    max-width: 260px;
+  }
+
+  .predictions-below {
+    min-width: 240px;
+  }
+
+  /* Let all three columns shrink so they stay on one row */
+  .traffic-column,
+  .camera-section,
+  .ped-column {
+    flex: 0 1 auto;
+  }
 }
 </style>
 </head>
@@ -484,4 +518,3 @@ function applySignalChange(frameWinner, lightBox, textBox) {
 
 </body>
 </html>
-
