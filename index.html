@@ -265,7 +265,7 @@ button:hover {
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
 <script>
-const URL = "https://teachablemachine.withgoogle.com/models/GvQuH5abW/";
+const URL = "https://teachablemachine.withgoogle.com/models/ccWMh23LB/";
 
 let model, webcam, labelContainer, maxPredictions;
 let isRunning = false;
@@ -275,7 +275,7 @@ let currentSignal = "none";        // "ped", "car", "traf", "none"
 let lastWinner = "none";
 let sameWinnerCount = 0;
 const STABLE_FRAMES = 5;          // frames needed for same winner
-const THRESHOLD = 70;
+const THRESHOLD = 50;
 const HYSTERESIS = 10;
 
 // 3s delay before switching signal
@@ -518,5 +518,6 @@ function applySignalChange(frameWinner, lightBox, textBox) {
 
 </body>
 </html>
+
 
 
