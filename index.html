@@ -502,12 +502,12 @@ function applySignalChange(frameWinner, lightBox, textBox) {
         setPedestrianLight("red");
         lightBox.innerHTML = "🔴 PEDESTRIANS WAIT";
         textBox.innerHTML = "More cars detected. Please wait before crossing.";
-    } else if (frameWinner === "traf") {
-        setTrafficLight("yellow");
-        setPedestrianLight("red");
-        lightBox.innerHTML = "🟡 YELLOW LIGHT";
-        textBox.innerHTML = "Caution, traffic signal detected.";
-    } else if (frameWinner === "none") {
+    }else if (frameWinner === "traf") {
+    setTrafficLight("green");   // green for vehicles
+    setPedestrianLight("red");  // red for pedestrians
+    lightBox.innerHTML = "🟢 VEHICLE PRIORITY";
+    textBox.innerHTML = "Traffic detected. Vehicles go, pedestrians wait.";
+} else if (frameWinner === "none") {
         setTrafficLight(null);
         setPedestrianLight(null);
         lightBox.innerHTML = "⚪";
@@ -518,6 +518,7 @@ function applySignalChange(frameWinner, lightBox, textBox) {
 
 </body>
 </html>
+
 
 
 
