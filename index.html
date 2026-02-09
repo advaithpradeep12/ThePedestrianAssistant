@@ -13,16 +13,16 @@ body {
   margin-top: 30px;
 }
 
-/* Layout: vehicle light + camera in center, pedestrian light on right */
+
 .main-container {
   display: flex;
   justify-content: center;
   align-items: flex-start;
   gap: 20px;
-  flex-wrap: nowrap;          /* prevent wrapping so columns stay side by side */
+  flex-wrap: nowrap;          
 }
 
-/* Traffic light housing */
+
 .traffic-housing {
   width: 70px;
   background: #222;
@@ -32,7 +32,7 @@ body {
   margin-right: 10px;
 }
 
-/* Each light circle */
+
 .traffic-light {
   width: 50px;
   height: 50px;
@@ -43,12 +43,12 @@ body {
   position: relative;
 }
 
-/* Base (off) colors */
+
 .red-light   { background: #330000; }
 .yellow-light{ background: #333300; }
 .green-light { background: #003300; }
 
-/* Active glow */
+
 .active-red {
   background: red;
   box-shadow: 0 0 20px red;
@@ -135,27 +135,27 @@ button:hover {
   align-items: center;
 }
 
-/* Container for vehicle column */
+
 .traffic-column {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* Label under traffic housings */
+
 .traffic-label {
   margin-top: 4px;
   font-size: 14px;
 }
 
-/* Pedestrian column on right */
+
 .ped-column {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* Glowing pedestrian icon */
+
 .ped-icon {
   position: absolute;
   top: 50%;
@@ -242,13 +242,13 @@ button:hover {
     <div id="signal-light" style="margin-top:20px; font-size:22px; font-weight:bold;"></div>
     <div id="signal-text" style="margin-top:10px; font-size:18px;"></div>
 
-    <!-- Probability table moved here -->
+    
     <div class="predictions-below">
       <div id="label-container"></div>
     </div>
   </div>
 
-  <!-- Pedestrian traffic light on the right -->
+
   <div class="ped-column">
     <div class="traffic-housing">
       <div id="ped-red" class="traffic-light red-light"></div>
@@ -260,7 +260,7 @@ button:hover {
   </div>
 </div>
 
-<!-- Scripts -->
+
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
@@ -358,7 +358,7 @@ function setTrafficLight(color) {
     }
 }
 
-// Pedestrian traffic light (red/green only, with glowing icon)
+// Pedestrian traffic light
 function setPedestrianLight(color) {
     const pedRed = document.getElementById("ped-red");
     const pedGreen = document.getElementById("ped-green");
@@ -503,8 +503,8 @@ function applySignalChange(frameWinner, lightBox, textBox) {
         lightBox.innerHTML = "🔴 PEDESTRIANS WAIT";
         textBox.innerHTML = "More cars detected. Please wait before crossing.";
     }else if (frameWinner === "traf") {
-    setTrafficLight("green");   // green for vehicles
-    setPedestrianLight("red");  // red for pedestrians
+    setTrafficLight("green");   // green for veh
+    setPedestrianLight("red");  // red for ped
     lightBox.innerHTML = "🟢 VEHICLE PRIORITY";
     textBox.innerHTML = "Traffic detected. Vehicles go, pedestrians wait.";
 } else if (frameWinner === "none") {
@@ -518,6 +518,7 @@ function applySignalChange(frameWinner, lightBox, textBox) {
 
 </body>
 </html>
+
 
 
 
